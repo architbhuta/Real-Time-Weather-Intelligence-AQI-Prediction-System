@@ -29,6 +29,8 @@ DATABASE_PATH = str(
     Path(_database_path) if os.path.isabs(_database_path) else PROJECT_ROOT / _database_path
 )
 
+SAVED_MODELS_DIR = str(PROJECT_ROOT / "models" / "saved_models")
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
