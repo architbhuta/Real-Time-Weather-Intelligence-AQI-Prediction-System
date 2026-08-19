@@ -50,10 +50,9 @@ def backfill_location(location: str, days: int = DEFAULT_BACKFILL_DAYS, engine=N
         if not validate_weather_record(weather_raw) or not validate_air_quality_record(air_quality_raw):
             continue
 
-        weather_clean = clean_weather_record(weather_raw, location)
-        air_quality_clean = clean_air_quality_record(air_quality_raw, location)
-
         try:
+            weather_clean = clean_weather_record(weather_raw, location)
+            air_quality_clean = clean_air_quality_record(air_quality_raw, location)
             insert_weather_and_air_quality(engine, weather_clean, air_quality_clean)
             stored += 1
         except Exception as exc:

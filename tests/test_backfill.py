@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import patch
 
 from data.database import AirQualityData, WeatherData, get_engine, init_db
@@ -76,3 +77,51 @@ def test_backfill_location_returns_zero_for_unknown_location():
     stored = backfill_location("Atlantis", days=1, engine=engine)
 
     assert stored == 0
+
+
+@patch("backfill.clean_weather_record")
+@patch("backfill.fetch_historical_air_quality")
+@patch("backfill.fetch_historical_weather")
+def test_backfill_location_skips_pair_when_cleaning_raises(mock_weather, mock_air_quality, mock_clean_weather):
+    from backfill import backfill_location
+
+    mock_weather.return_value = [
+        _weather_record("2026-05-01T00:00"),
+        _weather_record("2026-05-01T01:00"),
+    ]
+    mock_air_quality.return_value = [
+        _air_quality_record("2026-05-01T00:00"),
+        _air_quality_record("2026-05-01T01:00"),
+    ]
+
+    def raise_for_first_hour(record, location):
+        if record["timestamp"] == "2026-05-01T00:00":
+            raise ValueError("malformed timestamp")
+        return {
+            "timestamp": datetime.fromisoformat(record["timestamp"]),
+            "location": location,
+            "latitude": record["latitude"],
+            "longitude": record["longitude"],
+            "temperature": record["temperature"],
+            "feels_like": record["feels_like"],
+            "humidity": record["humidity"],
+            "pressure": record["pressure"],
+            "wind_speed": record["wind_speed"],
+            "wind_direction": record["wind_direction"],
+            "rainfall": record["rainfall"],
+            "visibility": record["visibility"],
+            "cloud_cover": record["cloud_cover"],
+            "uv_index": record["uv_index"],
+        }
+
+    mock_clean_weather.side_effect = raise_for_first_hour
+
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    stored = backfill_location("Delhi", days=1, engine=engine)
+
+    assert stored == 1
+    with Session(engine) as session:
+        assert session.query(WeatherData).count() == 1
+        assert session.query(AirQualityData).count() == 1
