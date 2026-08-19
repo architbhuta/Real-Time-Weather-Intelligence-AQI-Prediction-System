@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import pandas as pd
+
 from data.database import (
     AirQualityData,
     WeatherData,
@@ -8,6 +10,7 @@ from data.database import (
     insert_air_quality_record,
     insert_weather_and_air_quality,
     insert_weather_record,
+    load_weather_and_air_quality,
 )
 from sqlalchemy.orm import Session
 
@@ -147,3 +150,44 @@ def test_insert_weather_and_air_quality_is_atomic():
     with Session(engine) as session:
         assert session.query(WeatherData).count() == 0
         assert session.query(AirQualityData).count() == 1
+
+
+def test_load_weather_and_air_quality_joins_on_timestamp_and_location():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    insert_weather_and_air_quality(engine, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "latitude": 28.7041, "longitude": 77.1025, "temperature": 30.0,
+        "feels_like": 32.0, "humidity": 55, "pressure": 1005.0, "wind_speed": 10.0,
+        "wind_direction": 200, "rainfall": 0.0, "visibility": None,
+        "cloud_cover": 20, "uv_index": None,
+    }, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "pm25": 80.0, "pm10": 130.0, "co": 450.0, "no2": 30.0, "so2": 8.0, "o3": 35.0, "aqi": 158,
+    })
+    # A weather-only hour (no matching air-quality row) must not appear in the join
+    insert_weather_record(engine, {
+        "timestamp": datetime(2026, 5, 1, 1, 0), "location": "Delhi",
+        "latitude": 28.7041, "longitude": 77.1025, "temperature": 29.0,
+        "feels_like": 31.0, "humidity": 58, "pressure": 1005.5, "wind_speed": 9.0,
+        "wind_direction": 195, "rainfall": 0.0, "visibility": None,
+        "cloud_cover": 25, "uv_index": None,
+    })
+
+    df = load_weather_and_air_quality(engine, "Delhi")
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 1
+    assert df.iloc[0]["temperature"] == 30.0
+    assert df.iloc[0]["aqi"] == 158
+
+
+def test_load_weather_and_air_quality_returns_empty_frame_for_unknown_location():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    df = load_weather_and_air_quality(engine, "Nowhere")
+
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 0

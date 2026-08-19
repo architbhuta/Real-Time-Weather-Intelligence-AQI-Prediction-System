@@ -1,3 +1,4 @@
+import pandas as pd
 from sqlalchemy import (
     Column,
     DateTime,
@@ -145,3 +146,31 @@ def insert_weather_and_air_quality(
                 weather_record.get("location"),
                 weather_record.get("timestamp"),
             )
+
+
+def load_weather_and_air_quality(engine, location: str) -> pd.DataFrame:
+    with Session(engine) as session:
+        weather_rows = session.query(WeatherData).filter(WeatherData.location == location).all()
+        air_quality_rows = session.query(AirQualityData).filter(AirQualityData.location == location).all()
+
+    weather_df = pd.DataFrame([{
+        "timestamp": r.timestamp, "location": r.location, "temperature": r.temperature,
+        "feels_like": r.feels_like, "humidity": r.humidity, "pressure": r.pressure,
+        "wind_speed": r.wind_speed, "wind_direction": r.wind_direction, "rainfall": r.rainfall,
+        "visibility": r.visibility, "cloud_cover": r.cloud_cover, "uv_index": r.uv_index,
+    } for r in weather_rows])
+
+    air_quality_df = pd.DataFrame([{
+        "timestamp": r.timestamp, "location": r.location, "pm25": r.pm25, "pm10": r.pm10,
+        "co": r.co, "no2": r.no2, "so2": r.so2, "o3": r.o3, "aqi": r.aqi,
+    } for r in air_quality_rows])
+
+    if weather_df.empty or air_quality_df.empty:
+        return pd.DataFrame(columns=[
+            "timestamp", "location", "temperature", "feels_like", "humidity", "pressure",
+            "wind_speed", "wind_direction", "rainfall", "visibility", "cloud_cover", "uv_index",
+            "pm25", "pm10", "co", "no2", "so2", "o3", "aqi",
+        ])
+
+    merged = pd.merge(weather_df, air_quality_df, on=["timestamp", "location"], how="inner")
+    return merged.sort_values("timestamp").reset_index(drop=True)
