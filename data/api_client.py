@@ -2,7 +2,7 @@ import time
 
 import requests
 
-from utils.config import WEATHER_API_URL
+from utils.config import AIR_QUALITY_API_URL, WEATHER_API_URL
 from utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -62,4 +62,36 @@ def fetch_current_weather(latitude: float, longitude: float) -> dict | None:
         "visibility": current.get("visibility"),
         "cloud_cover": current.get("cloud_cover"),
         "uv_index": current.get("uv_index"),
+    }
+
+
+def fetch_current_air_quality(latitude: float, longitude: float) -> dict | None:
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": ",".join([
+            "pm2_5",
+            "pm10",
+            "carbon_monoxide",
+            "nitrogen_dioxide",
+            "sulphur_dioxide",
+            "ozone",
+        ]),
+        "timezone": "auto",
+    }
+    payload = _get_with_retry(AIR_QUALITY_API_URL, params)
+    if payload is None or "current" not in payload:
+        return None
+
+    current = payload["current"]
+    return {
+        "timestamp": current.get("time"),
+        "latitude": latitude,
+        "longitude": longitude,
+        "pm25": current.get("pm2_5"),
+        "pm10": current.get("pm10"),
+        "co": current.get("carbon_monoxide"),
+        "no2": current.get("nitrogen_dioxide"),
+        "so2": current.get("sulphur_dioxide"),
+        "o3": current.get("ozone"),
     }

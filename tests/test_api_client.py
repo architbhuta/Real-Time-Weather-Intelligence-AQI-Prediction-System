@@ -65,3 +65,36 @@ def test_fetch_current_weather_handles_malformed_json(mock_get):
 
     assert result is None
     assert mock_get.call_count == 3
+
+
+SAMPLE_AIR_QUALITY_RESPONSE = {
+    "current": {
+        "time": "2026-08-19T12:00",
+        "pm2_5": 85.0,
+        "pm10": 140.0,
+        "carbon_monoxide": 500.0,
+        "nitrogen_dioxide": 35.0,
+        "sulphur_dioxide": 10.0,
+        "ozone": 40.0,
+    }
+}
+
+
+@patch("data.api_client.requests.get")
+def test_fetch_current_air_quality_parses_response(mock_get):
+    from data.api_client import fetch_current_air_quality
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = SAMPLE_AIR_QUALITY_RESPONSE
+    mock_get.return_value = mock_response
+
+    result = fetch_current_air_quality(28.7041, 77.1025)
+
+    assert result is not None
+    assert result["pm25"] == 85.0
+    assert result["pm10"] == 140.0
+    assert result["co"] == 500.0
+    assert result["no2"] == 35.0
+    assert result["so2"] == 10.0
+    assert result["o3"] == 40.0
