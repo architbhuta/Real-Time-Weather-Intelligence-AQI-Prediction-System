@@ -4,6 +4,11 @@ from data.api_client import _get_with_retry
 from utils.config import AIR_QUALITY_API_URL, HISTORICAL_WEATHER_API_URL
 
 
+def _safe_index(values: list, i: int):
+    """Safely index into a list, returning None if index is out of bounds."""
+    return values[i] if i < len(values) else None
+
+
 def fetch_historical_weather(latitude: float, longitude: float, start_date: str, end_date: str) -> list[dict]:
     params = {
         "latitude": latitude,
@@ -34,15 +39,15 @@ def fetch_historical_weather(latitude: float, longitude: float, start_date: str,
             "timestamp": timestamp,
             "latitude": latitude,
             "longitude": longitude,
-            "temperature": hourly.get("temperature_2m", [None] * len(times))[i],
-            "feels_like": hourly.get("apparent_temperature", [None] * len(times))[i],
-            "humidity": hourly.get("relative_humidity_2m", [None] * len(times))[i],
-            "pressure": hourly.get("pressure_msl", [None] * len(times))[i],
-            "wind_speed": hourly.get("wind_speed_10m", [None] * len(times))[i],
-            "wind_direction": hourly.get("wind_direction_10m", [None] * len(times))[i],
-            "rainfall": hourly.get("precipitation", [None] * len(times))[i],
+            "temperature": _safe_index(hourly.get("temperature_2m", []), i),
+            "feels_like": _safe_index(hourly.get("apparent_temperature", []), i),
+            "humidity": _safe_index(hourly.get("relative_humidity_2m", []), i),
+            "pressure": _safe_index(hourly.get("pressure_msl", []), i),
+            "wind_speed": _safe_index(hourly.get("wind_speed_10m", []), i),
+            "wind_direction": _safe_index(hourly.get("wind_direction_10m", []), i),
+            "rainfall": _safe_index(hourly.get("precipitation", []), i),
             "visibility": None,
-            "cloud_cover": hourly.get("cloud_cover", [None] * len(times))[i],
+            "cloud_cover": _safe_index(hourly.get("cloud_cover", []), i),
             "uv_index": None,
         })
     return records
@@ -76,11 +81,11 @@ def fetch_historical_air_quality(latitude: float, longitude: float, start_date: 
             "timestamp": timestamp,
             "latitude": latitude,
             "longitude": longitude,
-            "pm25": hourly.get("pm2_5", [None] * len(times))[i],
-            "pm10": hourly.get("pm10", [None] * len(times))[i],
-            "co": hourly.get("carbon_monoxide", [None] * len(times))[i],
-            "no2": hourly.get("nitrogen_dioxide", [None] * len(times))[i],
-            "so2": hourly.get("sulphur_dioxide", [None] * len(times))[i],
-            "o3": hourly.get("ozone", [None] * len(times))[i],
+            "pm25": _safe_index(hourly.get("pm2_5", []), i),
+            "pm10": _safe_index(hourly.get("pm10", []), i),
+            "co": _safe_index(hourly.get("carbon_monoxide", []), i),
+            "no2": _safe_index(hourly.get("nitrogen_dioxide", []), i),
+            "so2": _safe_index(hourly.get("sulphur_dioxide", []), i),
+            "o3": _safe_index(hourly.get("ozone", []), i),
         })
     return records
