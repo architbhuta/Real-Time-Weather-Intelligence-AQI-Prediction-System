@@ -33,3 +33,4 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
 AIR_QUALITY_API_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
+HISTORICAL_WEATHER_API_URL = "https://archive-api.open-meteo.com/v1/archive"
