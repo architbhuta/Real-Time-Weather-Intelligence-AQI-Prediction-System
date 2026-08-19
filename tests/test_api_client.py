@@ -49,3 +49,19 @@ def test_fetch_current_weather_returns_none_after_retries_exhausted(mock_get):
 
     assert result is None
     assert mock_get.call_count == 3
+
+
+@patch("data.api_client.requests.get")
+def test_fetch_current_weather_handles_malformed_json(mock_get):
+    from data.api_client import fetch_current_weather
+
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    mock_get.return_value = mock_response
+
+    result = fetch_current_weather(28.7041, 77.1025)
+
+    assert result is None
+    assert mock_get.call_count == 3

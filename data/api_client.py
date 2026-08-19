@@ -17,7 +17,7 @@ def _get_with_retry(url: str, params: dict) -> dict | None:
             response = requests.get(url, params=params, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
             return response.json()
-        except requests.exceptions.RequestException as exc:
+        except (requests.exceptions.RequestException, ValueError) as exc:
             logger.warning("Request attempt %d/%d failed: %s", attempt, MAX_RETRIES, exc)
             if attempt < MAX_RETRIES:
                 time.sleep(2 ** attempt)
