@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 SAMPLE_WEATHER_RESPONSE = {
     "current": {
@@ -37,8 +37,9 @@ def test_fetch_current_weather_parses_response(mock_get):
     assert result["timestamp"] == "2026-08-19T12:00"
 
 
+@patch("data.api_client.time.sleep")
 @patch("data.api_client.requests.get")
-def test_fetch_current_weather_returns_none_after_retries_exhausted(mock_get):
+def test_fetch_current_weather_returns_none_after_retries_exhausted(mock_get, mock_sleep):
     import requests
 
     from data.api_client import fetch_current_weather
@@ -49,10 +50,13 @@ def test_fetch_current_weather_returns_none_after_retries_exhausted(mock_get):
 
     assert result is None
     assert mock_get.call_count == 3
+    # Exponential backoff between attempts, and none after the last one.
+    assert mock_sleep.call_args_list == [call(2), call(4)]
 
 
+@patch("data.api_client.time.sleep")
 @patch("data.api_client.requests.get")
-def test_fetch_current_weather_handles_malformed_json(mock_get):
+def test_fetch_current_weather_handles_malformed_json(mock_get, mock_sleep):
     from data.api_client import fetch_current_weather
 
     mock_response = MagicMock()
@@ -65,6 +69,7 @@ def test_fetch_current_weather_handles_malformed_json(mock_get):
 
     assert result is None
     assert mock_get.call_count == 3
+    assert mock_sleep.call_args_list == [call(2), call(4)]
 
 
 SAMPLE_AIR_QUALITY_RESPONSE = {

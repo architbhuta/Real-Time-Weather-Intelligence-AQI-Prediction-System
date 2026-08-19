@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Repo root, so paths never depend on the process's working directory.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # city -> (latitude, longitude)
 LOCATIONS: dict[str, tuple[float, float]] = {
@@ -17,7 +21,14 @@ LOCATIONS: dict[str, tuple[float, float]] = {
 }
 
 DEFAULT_LOCATION = os.getenv("DEFAULT_LOCATION", "Delhi")
-DATABASE_PATH = os.getenv("DATABASE_PATH", "db/aqi_system.db")
+
+# A relative DATABASE_PATH (including the default) is resolved against the repo
+# root, so `python collect.py` works from any working directory.
+_database_path = os.getenv("DATABASE_PATH") or "db/aqi_system.db"
+DATABASE_PATH = str(
+    Path(_database_path) if os.path.isabs(_database_path) else PROJECT_ROOT / _database_path
+)
+
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast"
