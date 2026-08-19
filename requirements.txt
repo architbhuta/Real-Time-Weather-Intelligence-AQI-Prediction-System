@@ -1,0 +1,12 @@
+requests>=2.31
+python-dotenv>=1.0
+SQLAlchemy>=2.0
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+xgboost>=2.0
+streamlit>=1.32
+plotly>=5.20
+folium>=0.16
+streamlit-folium>=0.20
+pytest>=8.0
