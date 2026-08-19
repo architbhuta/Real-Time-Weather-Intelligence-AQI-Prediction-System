@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from data.feature_engineering import add_lag_features, add_rolling_features, add_time_features, build_features
 
@@ -43,3 +44,25 @@ def test_build_features_sorts_by_timestamp_before_computing():
 
     assert list(result["timestamp"]) == list(df["timestamp"])
     assert result["aqi_lag_1"].iloc[1] == 100
+
+
+def test_build_features_accepts_a_single_location_frame():
+    df = _hourly_df()
+    df["pm10"] = df["pm25"] + 20
+    df["location"] = "Delhi"
+
+    result = build_features(df)
+
+    assert result["aqi_lag_1"].iloc[1] == 100
+
+
+def test_build_features_rejects_multi_location_frame():
+    delhi = _hourly_df()
+    delhi["pm10"] = delhi["pm25"] + 20
+    delhi["location"] = "Delhi"
+    mumbai = delhi.copy()
+    mumbai["location"] = "Mumbai"
+    multi_city = pd.concat([delhi, mumbai], ignore_index=True)
+
+    with pytest.raises(AssertionError, match="single-location"):
+        build_features(multi_city)
