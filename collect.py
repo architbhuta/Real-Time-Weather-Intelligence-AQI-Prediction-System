@@ -34,11 +34,16 @@ def collect_for_location(location: str, engine=None) -> bool:
         logger.error("Validation failed for %s, discarding this fetch", location)
         return False
 
-    weather_clean = clean_weather_record(weather_raw, location)
-    air_quality_clean = clean_air_quality_record(air_quality_raw, location)
+    try:
+        weather_clean = clean_weather_record(weather_raw, location)
+        air_quality_clean = clean_air_quality_record(air_quality_raw, location)
 
-    insert_weather_record(engine, weather_clean)
-    insert_air_quality_record(engine, air_quality_clean)
+        insert_weather_record(engine, weather_clean)
+        insert_air_quality_record(engine, air_quality_clean)
+    except Exception as exc:
+        logger.error("Failed to store data for %s: %s", location, exc)
+        return False
+
     logger.info("Stored weather + air quality for %s (AQI=%s)", location, air_quality_clean["aqi"])
     return True
 
