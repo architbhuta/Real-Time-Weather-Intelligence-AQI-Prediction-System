@@ -23,7 +23,9 @@ def backfill_location(location: str, days: int = DEFAULT_BACKFILL_DAYS, engine=N
         return 0
 
     latitude, longitude = LOCATIONS[location]
-    end_date = date.today()
+    # Open-Meteo's archive API lags ~1 day behind "today" (it doesn't yet have
+    # data for the current day), so end_date intentionally targets yesterday.
+    end_date = date.today() - timedelta(days=1)
     start_date = end_date - timedelta(days=days)
 
     engine = engine or get_engine()
