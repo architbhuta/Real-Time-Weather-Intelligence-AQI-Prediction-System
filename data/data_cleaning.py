@@ -18,6 +18,13 @@ def validate_weather_record(record: dict) -> bool:
 
 
 def validate_air_quality_record(record: dict) -> bool:
+    """Is this record worth storing at all?
+
+    Deliberately looser than CPCB's AQI-validity rule: a record with a single
+    pollutant still carries a real raw measurement worth keeping. Whether that
+    is enough to report an AQI is decided by `calculate_cpcb_aqi`, which
+    returns None below CPCB's three-pollutant / particulate minimum.
+    """
     if record.get("timestamp") is None:
         logger.warning("Air quality record missing timestamp")
         return False

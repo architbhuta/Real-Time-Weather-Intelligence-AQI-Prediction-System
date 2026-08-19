@@ -3,8 +3,10 @@
 Breakpoints are from CPCB's National AQI (2014) sub-index tables, in
 µg/m3 for PM2.5, PM10, NO2, SO2, O3 (24-hr avg, O3 8-hr avg) and mg/m3
 for CO (8-hr avg). Overall AQI is the maximum of the available
-sub-indices, per CPCB methodology. Open-Meteo returns CO in µg/m3, so
-it is converted to mg/m3 before lookup.
+sub-indices, per CPCB methodology, and is only reported when CPCB's
+minimum-data rule is met: at least three pollutants, including PM2.5 or
+PM10. Open-Meteo returns CO in µg/m3, so it is converted to mg/m3
+before lookup.
 
 Each tuple is (concentration_low, concentration_high, index_low, index_high).
 """
@@ -58,6 +60,11 @@ CO_BREAKPOINTS_MG = [
     (34.0, 50.0, 400, 500),
 ]
 
+# CPCB validity threshold: a National AQI needs at least three pollutants,
+# and at least one of them must be PM2.5 or PM10.
+MINIMUM_POLLUTANTS = 3
+PARTICULATE_POLLUTANTS = frozenset({"pm25", "pm10"})
+
 CATEGORY_THRESHOLDS = [
     (50, "Good"),
     (100, "Satisfactory"),
@@ -100,7 +107,10 @@ def calculate_cpcb_aqi(
     if co is not None:
         sub_indices["co"] = _sub_index(co / 1000.0, CO_BREAKPOINTS_MG)
 
-    if not sub_indices:
+    # CPCB requires at least three pollutants, one of which must be PM2.5 or
+    # PM10, before a National AQI is considered valid. A degraded API response
+    # below that bar yields no AQI rather than a falsely confident one.
+    if len(sub_indices) < MINIMUM_POLLUTANTS or not (PARTICULATE_POLLUTANTS & sub_indices.keys()):
         return None, None
 
     dominant_pollutant = max(sub_indices, key=sub_indices.get)
