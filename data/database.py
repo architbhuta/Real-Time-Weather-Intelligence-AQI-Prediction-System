@@ -1,7 +1,19 @@
-from sqlalchemy import Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    UniqueConstraint,
+    create_engine,
+)
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from utils.config import DATABASE_PATH
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -10,6 +22,9 @@ class Base(DeclarativeBase):
 
 class WeatherData(Base):
     __tablename__ = "weather_data"
+    __table_args__ = (
+        UniqueConstraint("timestamp", "location", name="uq_weather_data_timestamp_location"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, nullable=False)
@@ -30,6 +45,9 @@ class WeatherData(Base):
 
 class AirQualityData(Base):
     __tablename__ = "air_quality_data"
+    __table_args__ = (
+        UniqueConstraint("timestamp", "location", name="uq_air_quality_data_timestamp_location"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, nullable=False)
@@ -77,12 +95,53 @@ def init_db(engine) -> None:
 
 
 def insert_weather_record(engine, record: dict) -> None:
+    """Insert one weather row. A duplicate (timestamp, location) is a no-op."""
     with Session(engine) as session:
         session.add(WeatherData(**record))
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            logger.info(
+                "Weather record for %s at %s already stored; skipping duplicate",
+                record.get("location"),
+                record.get("timestamp"),
+            )
 
 
 def insert_air_quality_record(engine, record: dict) -> None:
+    """Insert one air-quality row. A duplicate (timestamp, location) is a no-op."""
     with Session(engine) as session:
         session.add(AirQualityData(**record))
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            logger.info(
+                "Air quality record for %s at %s already stored; skipping duplicate",
+                record.get("location"),
+                record.get("timestamp"),
+            )
+
+
+def insert_weather_and_air_quality(
+    engine, weather_record: dict, air_quality_record: dict
+) -> None:
+    """Insert a paired weather + air-quality observation in one transaction.
+
+    Both rows are added to the same session and committed once, so either both
+    are stored or neither is — no orphan weather row if the air-quality row
+    fails. A duplicate (timestamp, location) on either row is a no-op.
+    """
+    with Session(engine) as session:
+        session.add(WeatherData(**weather_record))
+        session.add(AirQualityData(**air_quality_record))
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            logger.info(
+                "Observation for %s at %s already stored; skipping duplicate",
+                weather_record.get("location"),
+                weather_record.get("timestamp"),
+            )
