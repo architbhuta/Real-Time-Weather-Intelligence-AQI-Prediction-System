@@ -4,6 +4,9 @@ __pycache__/
 venv/
 .venv/
 db/*.db
+models/saved_models/*.joblib
+models/saved_models/*_model_name.txt
+models/saved_models/metrics.csv
 logs/*.log
 .DS_Store
 *.egg-info/
