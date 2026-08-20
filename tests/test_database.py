@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 import pandas as pd
@@ -14,6 +15,7 @@ from data.database import (
     insert_weather_record,
     load_weather_and_air_quality,
 )
+from sqlalchemy import Column, DateTime, Float, Integer, MetaData, String, Table
 from sqlalchemy.orm import Session
 
 WEATHER_RECORD = {
@@ -240,3 +242,45 @@ def test_insert_anomalies_allows_different_metrics_at_same_timestamp():
     ])
 
     assert stored == 2
+
+
+def _create_anomalies_table_without_unique_constraint(engine):
+    """Build an `anomalies` table shaped like an older schema version: same columns,
+    no UniqueConstraint. `create_all` will leave it exactly as-is."""
+    metadata = MetaData()
+    Table(
+        "anomalies",
+        metadata,
+        Column("id", Integer, primary_key=True, autoincrement=True),
+        Column("timestamp", DateTime, nullable=False),
+        Column("location", String, nullable=False),
+        Column("metric", String, nullable=False),
+        Column("observed_value", Float, nullable=False),
+        Column("expected_value", Float, nullable=False),
+        Column("anomaly_score", Float, nullable=False),
+        Column("severity", String, nullable=False),
+    ).create(engine)
+
+
+def test_init_db_warns_when_anomalies_table_is_missing_its_unique_constraint(caplog):
+    engine = get_engine(":memory:")
+    _create_anomalies_table_without_unique_constraint(engine)
+
+    with caplog.at_level(logging.WARNING):
+        init_db(engine)
+
+    assert any(
+        "missing its uniqueness constraint" in record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    )
+
+
+def test_init_db_does_not_warn_on_a_healthy_database(caplog):
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    with caplog.at_level(logging.WARNING):
+        init_db(engine)  # second call: the table now exists and is correct
+
+    assert [r for r in caplog.records if r.levelno == logging.WARNING] == []

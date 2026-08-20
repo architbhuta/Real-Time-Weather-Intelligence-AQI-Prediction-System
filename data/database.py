@@ -7,6 +7,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     create_engine,
+    inspect,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Session
@@ -92,8 +93,50 @@ def get_engine(db_path: str | None = None):
     return create_engine(f"sqlite:///{path}")
 
 
+# The dedup guarantee the whole anomaly path relies on, as a plain column set.
+_ANOMALY_UNIQUE_COLUMNS = {"timestamp", "location", "metric"}
+
+
+def _anomalies_table_is_unique_constrained(engine) -> bool:
+    """True if the live `anomalies` table really carries its uniqueness constraint.
+
+    SQLite reports a *named* ``UniqueConstraint`` through ``get_unique_constraints``,
+    while an unnamed one can instead surface as a unique index, so both are checked.
+    """
+    inspector = inspect(engine)
+    constraints = inspector.get_unique_constraints(Anomaly.__tablename__)
+    if any(set(c.get("column_names") or ()) == _ANOMALY_UNIQUE_COLUMNS for c in constraints):
+        return True
+    indexes = inspector.get_indexes(Anomaly.__tablename__)
+    return any(
+        ix.get("unique") and set(ix.get("column_names") or ()) == _ANOMALY_UNIQUE_COLUMNS
+        for ix in indexes
+    )
+
+
 def init_db(engine) -> None:
+    """Create any missing tables, and warn if an existing `anomalies` table has drifted.
+
+    ``create_all`` only creates tables that do not exist yet — it never retrofits a
+    constraint onto a table left over from an older schema version. That has bitten
+    this project twice on the same local dev database, and it fails silently: inserts
+    that should be deduplicated instead pile up as duplicates with no error. So the
+    one constraint the anomaly path depends on is checked explicitly here.
+
+    Only a table that existed *before* this call is checked — a table ``create_all``
+    just built is correct by construction and must not trigger a false warning.
+    """
+    anomalies_existed = inspect(engine).has_table(Anomaly.__tablename__)
+
     Base.metadata.create_all(engine)
+
+    if anomalies_existed and not _anomalies_table_is_unique_constrained(engine):
+        logger.warning(
+            "anomalies table exists but is missing its uniqueness constraint on "
+            "(timestamp, location, metric) (created by an older schema version) — "
+            "delete %s and regenerate it via backfill.py/collect.py/anomaly_scan.py to fix",
+            DATABASE_PATH,
+        )
 
 
 def insert_weather_record(engine, record: dict) -> None:
@@ -178,7 +221,17 @@ def load_weather_and_air_quality(engine, location: str) -> pd.DataFrame:
 
 
 def insert_anomalies(engine, records: list[dict]) -> int:
-    """Insert anomaly rows. A duplicate (timestamp, location, metric) is a no-op."""
+    """Insert anomaly rows. A duplicate (timestamp, location, metric) is a no-op.
+
+    Known, deliberate limitation: a row is written once, on first detection, and is
+    never refreshed by a later rescan. A stored row's ``expected_value``,
+    ``anomaly_score`` and ``severity`` therefore describe the historical distribution
+    *as it was when the point was first flagged*, not the current one — as more
+    history accumulates the IQR fence moves, but already-stored rows do not follow it.
+    This is not a bug: whether stale rows should be refreshed is a display question,
+    and that decision belongs to the future dashboard plan that will actually consume
+    and show these values.
+    """
     stored = 0
     for record in records:
         with Session(engine) as session:
@@ -188,4 +241,10 @@ def insert_anomalies(engine, records: list[dict]) -> int:
                 stored += 1
             except IntegrityError:
                 session.rollback()
+                logger.info(
+                    "Anomaly for %s %s at %s already stored; skipping duplicate",
+                    record.get("location"),
+                    record.get("metric"),
+                    record.get("timestamp"),
+                )
     return stored
