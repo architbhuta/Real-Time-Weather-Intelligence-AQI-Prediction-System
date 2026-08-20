@@ -75,6 +75,7 @@ class Prediction(Base):
 
 class Anomaly(Base):
     __tablename__ = "anomalies"
+    __table_args__ = (UniqueConstraint("timestamp", "location", "metric", name="uq_anomaly_timestamp_location_metric"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, nullable=False)
@@ -174,3 +175,17 @@ def load_weather_and_air_quality(engine, location: str) -> pd.DataFrame:
 
     merged = pd.merge(weather_df, air_quality_df, on=["timestamp", "location"], how="inner")
     return merged.sort_values("timestamp").reset_index(drop=True)
+
+
+def insert_anomalies(engine, records: list[dict]) -> int:
+    """Insert anomaly rows. A duplicate (timestamp, location, metric) is a no-op."""
+    stored = 0
+    for record in records:
+        with Session(engine) as session:
+            try:
+                session.add(Anomaly(**record))
+                session.commit()
+                stored += 1
+            except IntegrityError:
+                session.rollback()
+    return stored

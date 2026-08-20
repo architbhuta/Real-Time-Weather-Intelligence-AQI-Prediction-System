@@ -4,10 +4,12 @@ import pandas as pd
 
 from data.database import (
     AirQualityData,
+    Anomaly,
     WeatherData,
     get_engine,
     init_db,
     insert_air_quality_record,
+    insert_anomalies,
     insert_weather_and_air_quality,
     insert_weather_record,
     load_weather_and_air_quality,
@@ -191,3 +193,50 @@ def test_load_weather_and_air_quality_returns_empty_frame_for_unknown_location()
 
     assert isinstance(df, pd.DataFrame)
     assert len(df) == 0
+
+
+def _anomaly_record(timestamp, metric="pm25"):
+    return {
+        "timestamp": timestamp, "location": "Delhi", "metric": metric,
+        "observed_value": 250.0, "expected_value": 90.0,
+        "anomaly_score": 2.3, "severity": "Medium",
+    }
+
+
+def test_insert_anomalies_stores_new_records():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    stored = insert_anomalies(engine, [
+        _anomaly_record(datetime(2026, 5, 1, 0, 0)),
+        _anomaly_record(datetime(2026, 5, 1, 1, 0)),
+    ])
+
+    assert stored == 2
+    with Session(engine) as session:
+        assert session.query(Anomaly).count() == 2
+
+
+def test_insert_anomalies_skips_duplicates_on_rerun():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    first = insert_anomalies(engine, [_anomaly_record(datetime(2026, 5, 1, 0, 0))])
+    second = insert_anomalies(engine, [_anomaly_record(datetime(2026, 5, 1, 0, 0))])
+
+    assert first == 1
+    assert second == 0
+    with Session(engine) as session:
+        assert session.query(Anomaly).count() == 1
+
+
+def test_insert_anomalies_allows_different_metrics_at_same_timestamp():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    stored = insert_anomalies(engine, [
+        _anomaly_record(datetime(2026, 5, 1, 0, 0), metric="pm25"),
+        _anomaly_record(datetime(2026, 5, 1, 0, 0), metric="temperature"),
+    ])
+
+    assert stored == 2
