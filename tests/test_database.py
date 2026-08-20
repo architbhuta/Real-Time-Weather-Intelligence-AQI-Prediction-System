@@ -284,3 +284,62 @@ def test_init_db_does_not_warn_on_a_healthy_database(caplog):
         init_db(engine)  # second call: the table now exists and is correct
 
     assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+
+from data.database import get_latest_reading, get_recent_anomalies
+
+
+def test_get_latest_reading_returns_the_newest_row():
+    engine = get_engine(":memory:")
+    init_db(engine)
+    insert_weather_and_air_quality(engine, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "latitude": 28.7041, "longitude": 77.1025, "temperature": 28.0,
+        "feels_like": 30.0, "humidity": 50.0, "pressure": 1004.0, "wind_speed": 8.0,
+        "wind_direction": 190.0, "rainfall": 0.0, "visibility": None,
+        "cloud_cover": 15.0, "uv_index": None,
+    }, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "pm25": 70.0, "pm10": 120.0, "co": 400.0, "no2": 28.0, "so2": 7.0, "o3": 30.0, "aqi": 140,
+    })
+    insert_weather_and_air_quality(engine, {
+        "timestamp": datetime(2026, 5, 1, 1, 0), "location": "Delhi",
+        "latitude": 28.7041, "longitude": 77.1025, "temperature": 29.0,
+        "feels_like": 31.0, "humidity": 52.0, "pressure": 1004.5, "wind_speed": 9.0,
+        "wind_direction": 195.0, "rainfall": 0.0, "visibility": None,
+        "cloud_cover": 18.0, "uv_index": None,
+    }, {
+        "timestamp": datetime(2026, 5, 1, 1, 0), "location": "Delhi",
+        "pm25": 85.0, "pm10": 140.0, "co": 420.0, "no2": 32.0, "so2": 9.0, "o3": 33.0, "aqi": 158,
+    })
+
+    reading = get_latest_reading(engine, "Delhi")
+
+    assert reading is not None
+    assert reading["aqi"] == 158
+    assert reading["timestamp"] == datetime(2026, 5, 1, 1, 0)
+
+
+def test_get_latest_reading_returns_none_for_unknown_location():
+    engine = get_engine(":memory:")
+    init_db(engine)
+
+    assert get_latest_reading(engine, "Atlantis") is None
+
+
+def test_get_recent_anomalies_orders_newest_first_and_respects_limit():
+    engine = get_engine(":memory:")
+    init_db(engine)
+    insert_anomalies(engine, [
+        {"timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi", "metric": "pm25",
+         "observed_value": 200.0, "expected_value": 80.0, "anomaly_score": 1.5, "severity": "Medium"},
+        {"timestamp": datetime(2026, 5, 1, 2, 0), "location": "Delhi", "metric": "pm10",
+         "observed_value": 300.0, "expected_value": 130.0, "anomaly_score": 2.5, "severity": "High"},
+        {"timestamp": datetime(2026, 5, 1, 1, 0), "location": "Delhi", "metric": "aqi",
+         "observed_value": 400.0, "expected_value": 150.0, "anomaly_score": 3.0, "severity": "High"},
+    ])
+
+    anomalies = get_recent_anomalies(engine, "Delhi", limit=2)
+
+    assert len(anomalies) == 2
+    assert list(anomalies["timestamp"]) == [datetime(2026, 5, 1, 2, 0), datetime(2026, 5, 1, 1, 0)]

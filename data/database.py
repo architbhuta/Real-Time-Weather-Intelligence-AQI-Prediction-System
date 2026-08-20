@@ -248,3 +248,29 @@ def insert_anomalies(engine, records: list[dict]) -> int:
                     record.get("timestamp"),
                 )
     return stored
+
+
+def get_latest_reading(engine, location: str) -> dict | None:
+    df = load_weather_and_air_quality(engine, location)
+    if df.empty:
+        return None
+    return df.iloc[-1].to_dict()
+
+
+def get_recent_anomalies(engine, location: str, limit: int = 20) -> pd.DataFrame:
+    with Session(engine) as session:
+        rows = (
+            session.query(Anomaly)
+            .filter(Anomaly.location == location)
+            .order_by(Anomaly.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+    return pd.DataFrame([{
+        "timestamp": r.timestamp,
+        "metric": r.metric,
+        "observed_value": r.observed_value,
+        "expected_value": r.expected_value,
+        "anomaly_score": r.anomaly_score,
+        "severity": r.severity,
+    } for r in rows])
