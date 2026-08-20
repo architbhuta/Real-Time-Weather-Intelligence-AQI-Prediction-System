@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 
 from data.database import AirQualityData, WeatherData, get_engine, init_db
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 
@@ -62,3 +63,35 @@ def test_scan_location_returns_zero_for_unknown_location():
     stored = scan_location("Atlantis", engine=engine)
 
     assert stored == 0
+
+
+def test_scan_location_returns_zero_when_storage_raises(monkeypatch):
+    """A non-IntegrityError from storage (e.g. OperationalError: database is locked
+    from a concurrent writer) must be logged and swallowed, not propagated."""
+    import anomaly_scan
+
+    engine = get_engine(":memory:")
+    init_db(engine)
+    _seed_history_with_spike(engine)
+
+    def _boom(*args, **kwargs):
+        raise OperationalError("INSERT INTO anomalies", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(anomaly_scan, "insert_anomalies", _boom)
+
+    assert anomaly_scan.scan_location("Delhi", engine=engine) == 0
+
+
+def test_scan_location_returns_zero_when_detection_raises(monkeypatch):
+    import anomaly_scan
+
+    engine = get_engine(":memory:")
+    init_db(engine)
+    _seed_history_with_spike(engine)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("detector exploded")
+
+    monkeypatch.setattr(anomaly_scan, "detect_anomalies_for_location", _boom)
+
+    assert anomaly_scan.scan_location("Delhi", engine=engine) == 0
