@@ -13,7 +13,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
-from data.database import get_engine, load_weather_and_air_quality
+from data.database import get_engine, init_db, load_weather_and_air_quality
 from models.dataset import FEATURE_COLUMNS, TARGET_HORIZONS, baseline_predict, build_training_frame, chronological_split
 from models.evaluate import compute_metrics
 from utils.config import DEFAULT_LOCATION, SAVED_MODELS_DIR
@@ -22,7 +22,11 @@ from utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 MIN_TRAINING_ROWS = 50
-METRICS_LOG_PATH = os.path.join(SAVED_MODELS_DIR, "metrics.csv")
+
+
+def _metrics_log_path() -> str:
+    """Resolved at call time so patching SAVED_MODELS_DIR redirects all file I/O."""
+    return os.path.join(SAVED_MODELS_DIR, "metrics.csv")
 
 
 def _candidate_models() -> dict:
@@ -35,7 +39,17 @@ def _candidate_models() -> dict:
 
 def train_and_evaluate(location: str, engine=None) -> dict:
     engine = engine or get_engine()
-    raw_df = load_weather_and_air_quality(engine, location)
+    try:
+        init_db(engine)
+        raw_df = load_weather_and_air_quality(engine, location)
+    except Exception as exc:
+        logger.error("Could not load stored history for %s: %s", location, exc)
+        return {}
+
+    if raw_df.empty:
+        logger.warning("No stored history for %s; skipping training", location)
+        return {}
+
     frame = build_training_frame(raw_df)
 
     if len(frame) < MIN_TRAINING_ROWS:
@@ -91,14 +105,15 @@ def train_and_evaluate(location: str, engine=None) -> dict:
 
 def _append_metrics_log(metrics_rows: list[dict], location: str, dataset_size: int) -> None:
     os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
+    metrics_log_path = _metrics_log_path()
     log_df = pd.DataFrame(metrics_rows)
     log_df["location"] = location
     log_df["dataset_size"] = dataset_size
     log_df["trained_at"] = datetime.now(timezone.utc).isoformat()
-    if os.path.exists(METRICS_LOG_PATH):
-        log_df.to_csv(METRICS_LOG_PATH, mode="a", header=False, index=False)
+    if os.path.exists(metrics_log_path):
+        log_df.to_csv(metrics_log_path, mode="a", header=False, index=False)
     else:
-        log_df.to_csv(METRICS_LOG_PATH, index=False)
+        log_df.to_csv(metrics_log_path, index=False)
 
 
 if __name__ == "__main__":

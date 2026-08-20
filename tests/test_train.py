@@ -34,7 +34,6 @@ def test_train_and_evaluate_produces_a_model_per_horizon(tmp_path, monkeypatch):
 
     saved_models_dir = str(tmp_path / "saved_models")
     monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", saved_models_dir)
-    monkeypatch.setattr(train_module, "METRICS_LOG_PATH", os.path.join(saved_models_dir, "metrics.csv"))
 
     engine = get_engine(":memory:")
     init_db(engine)
@@ -59,13 +58,58 @@ def test_train_and_evaluate_skips_horizon_with_insufficient_data(tmp_path, monke
 
     saved_models_dir = str(tmp_path / "saved_models")
     monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", saved_models_dir)
-    monkeypatch.setattr(train_module, "METRICS_LOG_PATH", os.path.join(saved_models_dir, "metrics.csv"))
 
     engine = get_engine(":memory:")
     init_db(engine)
     _seed_synthetic_history(engine, n=20)  # well under MIN_TRAINING_ROWS after feature/target trimming
 
     results = train_module.train_and_evaluate("Delhi", engine=engine)
+
+    assert results == {}
+    assert not os.path.exists(saved_models_dir)
+
+
+def test_train_and_evaluate_returns_empty_when_location_has_no_stored_rows(tmp_path, monkeypatch):
+    import models.train as train_module
+
+    saved_models_dir = str(tmp_path / "saved_models")
+    monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", saved_models_dir)
+
+    engine = get_engine(":memory:")
+    init_db(engine)  # tables exist, but nothing was ever backfilled for Mumbai
+
+    results = train_module.train_and_evaluate("Mumbai", engine=engine)
+
+    assert results == {}
+    assert not os.path.exists(saved_models_dir)
+
+
+def test_train_and_evaluate_returns_empty_when_tables_do_not_exist(tmp_path, monkeypatch):
+    import models.train as train_module
+
+    saved_models_dir = str(tmp_path / "saved_models")
+    monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", saved_models_dir)
+
+    # A fresh engine whose schema was never created: train_and_evaluate must
+    # init it itself rather than raising "no such table: weather_data".
+    engine = get_engine(str(tmp_path / "fresh.db"))
+
+    results = train_module.train_and_evaluate("Delhi", engine=engine)
+
+    assert results == {}
+    assert not os.path.exists(saved_models_dir)
+
+
+def test_train_and_evaluate_returns_empty_when_database_is_unusable(tmp_path, monkeypatch):
+    import models.train as train_module
+
+    saved_models_dir = str(tmp_path / "saved_models")
+    monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", saved_models_dir)
+
+    class _BrokenEngine:
+        pass
+
+    results = train_module.train_and_evaluate("Delhi", engine=_BrokenEngine())
 
     assert results == {}
     assert not os.path.exists(saved_models_dir)
