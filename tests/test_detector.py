@@ -59,6 +59,13 @@ def test_detect_anomalies_for_metric_returns_empty_below_min_history():
     assert anomalies == []
 
 
+def test_detect_anomalies_for_location_passes_min_history_through():
+    df = _history_df(n=40)  # enough for the default 30, not for 100
+
+    assert detect_anomalies_for_location(df, "Delhi") != []
+    assert detect_anomalies_for_location(df, "Delhi", min_history=100) == []
+
+
 def test_detect_anomalies_for_location_checks_all_metrics():
     df = _history_df()
 
