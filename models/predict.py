@@ -23,10 +23,21 @@ def load_model(horizon: str) -> tuple[object, str] | None:
     return model, model_name
 
 
-def predict_aqi(horizon: str, feature_row: pd.DataFrame) -> tuple[float, str]:
+def predict_aqi(horizon: str, feature_row: pd.DataFrame) -> tuple[float | None, str]:
+    """Predict AQI for one feature row.
+
+    Returns (value, model_name). When no model is saved the rolling-3h baseline
+    is used; if that baseline is unusable (empty frame, missing column, or NaN —
+    i.e. a location with fewer than 3 hours of history) this returns
+    (None, "unavailable") so callers can tell "no prediction" from a real number.
+    """
     loaded = load_model(horizon)
     if loaded is None:
+        if feature_row.empty or "aqi_rolling_3" not in feature_row.columns:
+            return None, "unavailable"
         predicted = float(baseline_predict(feature_row).iloc[0])
+        if pd.isna(predicted):
+            return None, "unavailable"
         return predicted, "baseline"
 
     model, model_name = loaded

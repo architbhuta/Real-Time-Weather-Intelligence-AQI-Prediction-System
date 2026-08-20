@@ -31,6 +31,29 @@ def test_predict_aqi_falls_back_to_baseline_when_no_model_saved(tmp_path, monkey
     assert model_name == "baseline"
 
 
+def test_predict_aqi_returns_unavailable_when_baseline_is_nan(tmp_path, monkeypatch):
+    import models.predict as predict_module
+
+    monkeypatch.setattr(predict_module, "SAVED_MODELS_DIR", str(tmp_path))
+
+    # Fewer than 3 hours of history: the rolling-3h baseline is NaN.
+    predicted, model_name = predict_module.predict_aqi("1h", _feature_row(aqi_rolling_3=float("nan")))
+
+    assert predicted is None
+    assert model_name == "unavailable"
+
+
+def test_predict_aqi_returns_unavailable_for_empty_or_incomplete_feature_row(tmp_path, monkeypatch):
+    import models.predict as predict_module
+
+    monkeypatch.setattr(predict_module, "SAVED_MODELS_DIR", str(tmp_path))
+
+    assert predict_module.predict_aqi("1h", pd.DataFrame()) == (None, "unavailable")
+
+    row_without_rolling = _feature_row().drop(columns=["aqi_rolling_3"])
+    assert predict_module.predict_aqi("1h", row_without_rolling) == (None, "unavailable")
+
+
 def test_predict_aqi_uses_saved_model_when_present(tmp_path, monkeypatch):
     import models.predict as predict_module
 
