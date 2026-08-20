@@ -254,7 +254,12 @@ def get_latest_reading(engine, location: str) -> dict | None:
     df = load_weather_and_air_quality(engine, location)
     if df.empty:
         return None
-    return df.iloc[-1].to_dict()
+    row = df.iloc[-1]
+    # A NULL in a nullable numeric column (e.g. aqi, pm25 when a live fetch was
+    # degraded) survives the SQL round-trip as pandas NaN, not Python None, once
+    # the column is coerced to float64 — convert it back so callers can rely on
+    # a plain `is None` check instead of every caller special-casing NaN.
+    return row.where(pd.notna(row), None).to_dict()
 
 
 def get_recent_anomalies(engine, location: str, limit: int = 20) -> pd.DataFrame:

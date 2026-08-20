@@ -327,6 +327,36 @@ def test_get_latest_reading_returns_none_for_unknown_location():
     assert get_latest_reading(engine, "Atlantis") is None
 
 
+def test_get_latest_reading_converts_null_numeric_columns_to_none_not_nan():
+    """A degraded live fetch can store aqi=None / pm25=None (data_cleaning.py's
+    documented behavior when fewer than 3 pollutants are available). Once that NULL
+    round-trips through SQLite, pandas coerces the whole column to float64 and
+    represents the missing value as NaN, not Python None. get_latest_reading must
+    convert it back so callers can rely on a plain `is None` check.
+    """
+    engine = get_engine(":memory:")
+    init_db(engine)
+    insert_weather_and_air_quality(engine, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "latitude": 28.7041, "longitude": 77.1025, "temperature": 28.0,
+        "feels_like": 30.0, "humidity": 50.0, "pressure": 1004.0, "wind_speed": 8.0,
+        "wind_direction": 190.0, "rainfall": 0.0, "visibility": None,
+        "cloud_cover": 15.0, "uv_index": None,
+    }, {
+        "timestamp": datetime(2026, 5, 1, 0, 0), "location": "Delhi",
+        "pm25": None, "pm10": None, "co": 400.0, "no2": 28.0, "so2": 7.0, "o3": 30.0, "aqi": None,
+    })
+
+    reading = get_latest_reading(engine, "Delhi")
+
+    assert reading is not None
+    assert reading["aqi"] is None
+    assert reading["pm25"] is None
+    assert reading["pm10"] is None
+    # A present value must still come through untouched.
+    assert reading["co"] == 400.0
+
+
 def test_get_recent_anomalies_orders_newest_first_and_respects_limit():
     engine = get_engine(":memory:")
     init_db(engine)
