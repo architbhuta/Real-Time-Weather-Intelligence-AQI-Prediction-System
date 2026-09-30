@@ -32,15 +32,15 @@ else:
     else:
         filtered = df
 
-    if filtered.empty:
-        st.warning(f"No data available for '{range_option}'. Showing all available data instead.")
+    if len(filtered) < 2:
+        st.warning(f"Not enough data for '{range_option}' to draw a trend. Showing all available data instead.")
         filtered = df
 
-    st.plotly_chart(aqi_timeseries_chart(filtered), use_container_width=True)
-    st.plotly_chart(pollutant_comparison_chart(filtered), use_container_width=True)
+    st.plotly_chart(aqi_timeseries_chart(filtered), width="stretch")
+    st.plotly_chart(pollutant_comparison_chart(filtered), width="stretch")
 
     scatter_cols = st.columns(2)
     with scatter_cols[0]:
-        st.plotly_chart(scatter_chart(filtered, "temperature", "aqi", "Temperature vs AQI"), use_container_width=True)
+        st.plotly_chart(scatter_chart(filtered, "temperature", "aqi", "Temperature vs AQI"), width="stretch")
     with scatter_cols[1]:
-        st.plotly_chart(scatter_chart(filtered, "humidity", "aqi", "Humidity vs AQI"), use_container_width=True)
+        st.plotly_chart(scatter_chart(filtered, "humidity", "aqi", "Humidity vs AQI"), width="stretch")

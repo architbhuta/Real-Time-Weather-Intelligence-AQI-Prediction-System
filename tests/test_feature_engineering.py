@@ -66,3 +66,33 @@ def test_build_features_rejects_multi_location_frame():
 
     with pytest.raises(AssertionError, match="single-location"):
         build_features(multi_city)
+
+
+def _with_pm10(df):
+    df["pm10"] = df["pm25"] + 20
+    return df
+
+
+def test_build_features_lags_are_time_based_across_a_gap():
+    df = _with_pm10(_hourly_df(10))
+    df = df.drop(index=[4, 5, 6]).reset_index(drop=True)  # hours 04-06 missing
+
+    result = build_features(df).set_index("timestamp")
+
+    # 07:00's previous hour (06:00) is missing, not the 03:00 row that precedes it positionally
+    assert pd.isna(result.loc["2026-08-19 07:00", "aqi_lag_1"])
+    # 09:00's lag_3 is 06:00 (missing); lag_6 is 03:00 (present)
+    assert pd.isna(result.loc["2026-08-19 09:00", "aqi_lag_3"])
+    assert result.loc["2026-08-19 09:00", "aqi_lag_6"] == 130
+
+
+def test_build_features_collapses_sub_hourly_readings_to_one_per_hour():
+    df = _with_pm10(_hourly_df(4))
+    extra = df.iloc[[3]].copy()
+    extra["timestamp"] = extra["timestamp"] + pd.Timedelta(minutes=30)
+    extra["aqi"] = 999
+    result = build_features(pd.concat([df, extra], ignore_index=True))
+
+    assert list(result["timestamp"]) == list(pd.date_range("2026-08-19 00:00", periods=4, freq="h"))
+    assert result["aqi"].iloc[3] == 999  # latest reading within the hour wins
+    assert result["aqi_lag_1"].iloc[3] == 120

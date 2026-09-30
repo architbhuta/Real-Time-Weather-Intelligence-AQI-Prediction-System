@@ -74,3 +74,24 @@ def test_baseline_predict_returns_rolling_average_column():
     predicted = baseline_predict(frame)
 
     assert (predicted == frame["aqi_rolling_3"]).all()
+
+
+def test_training_frame_targets_are_time_based_across_a_gap():
+    import pandas as pd
+    from models.dataset import build_training_frame
+
+    n = 40
+    raw = pd.DataFrame({
+        "timestamp": pd.date_range("2026-08-19 00:00", periods=n, freq="h"),
+        "aqi": [100 + i for i in range(n)],
+        "pm25": [50.0] * n, "pm10": [70.0] * n,
+        "temperature": 30.0, "humidity": 50.0, "pressure": 1000.0,
+        "wind_speed": 5.0, "rainfall": 0.0, "cloud_cover": 10.0,
+    })
+    raw = raw.drop(index=range(20, 30)).reset_index(drop=True)  # 10-hour gap
+
+    frame = build_training_frame(raw)
+
+    # every retained row's 1h target is exactly the next clock hour's AQI
+    assert ((frame["aqi_target_1h"] - frame["aqi"]) == 1).all()
+    assert ((frame["aqi_target_6h"] - frame["aqi"]) == 6).all()

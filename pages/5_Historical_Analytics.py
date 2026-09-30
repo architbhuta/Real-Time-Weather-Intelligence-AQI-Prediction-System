@@ -46,5 +46,5 @@ else:
     st.subheader("Correlation Matrix")
     numeric_columns = ["aqi", "pm25", "pm10", "temperature", "humidity", "wind_speed", "pressure", "rainfall"]
     available_columns = [c for c in numeric_columns if c in df.columns]
-    st.plotly_chart(correlation_heatmap(df, available_columns), use_container_width=True)
+    st.plotly_chart(correlation_heatmap(df, available_columns), width="stretch")
     st.caption("Correlation does not imply causation.")

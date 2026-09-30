@@ -4,6 +4,7 @@ import streamlit as st
 from data.aqi_calculator import aqi_category
 from data.database import get_engine, init_db, load_weather_and_air_quality
 from data.feature_engineering import build_features
+from models.dataset import FEATURE_COLUMNS
 from models.predict import predict_aqi
 from visualization.charts import prediction_chart
 from visualization.dashboard_common import render_location_selector
@@ -23,10 +24,15 @@ if raw_df.empty:
 else:
     features_df = build_features(raw_df)
     features_df["is_weekend"] = features_df["is_weekend"].astype(int)
-    latest = features_df.dropna(subset=["aqi_rolling_3"]).tail(1)
+    # Predict only from the newest hour, never from an older complete row: a stale
+    # row would present a forecast for the wrong time. NaN lags mean a collection gap.
+    latest = features_df.tail(1)
 
-    if latest.empty:
-        st.info("Not enough recent history to compute a prediction yet.")
+    if latest.empty or latest[FEATURE_COLUMNS].isna().any(axis=None):
+        st.info(
+            "Not enough continuous recent history to compute a prediction "
+            "(the last 6 hours need readings). Run the collector or backfill script."
+        )
     else:
         current_aqi = raw_df["aqi"].iloc[-1]
         st.metric("Current AQI", "N/A" if pd.isna(current_aqi) else f"{current_aqi:.0f}")
@@ -47,8 +53,10 @@ else:
                     col.caption("Baseline estimate (rolling average) — insufficient data for a trained model.")
                 else:
                     col.caption(f"Model: {model_name}")
+                if horizon == "6h":
+                    col.caption("Low confidence: the 6-hour forecast has limited accuracy.")
 
         st.caption("Predictions are estimates based on historical patterns, not guarantees of future air quality.")
 
         recent_history = raw_df.tail(48)
-        st.plotly_chart(prediction_chart(recent_history, predictions), use_container_width=True)
+        st.plotly_chart(prediction_chart(recent_history, predictions), width="stretch")

@@ -29,7 +29,7 @@ else:
     severity_cols[1].metric("Medium", int(severity_counts.get("Medium", 0)))
     severity_cols[2].metric("High", int(severity_counts.get("High", 0)))
 
-    st.plotly_chart(anomaly_scatter_chart(anomalies), use_container_width=True)
+    st.plotly_chart(anomaly_scatter_chart(anomalies), width="stretch")
 
     st.subheader("Recent Anomalies")
-    st.dataframe(anomalies.sort_values("timestamp", ascending=False), use_container_width=True)
+    st.dataframe(anomalies.sort_values("timestamp", ascending=False), width="stretch")
